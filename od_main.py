@@ -129,7 +129,6 @@ class Simulation():
 
     def add_links(self, number):    # create <number> new links with triadic closure and at random
         
-        #print("HELL A")
         if number != 0 and self.triadic_closure_prob != 0:
             # find open triads
             adj_2 = np.dot(self.adjacency, self.adjacency)  # matrix of distance 2 adjacency
@@ -140,9 +139,7 @@ class Simulation():
                                                 #   - or positive int (indicating the number of triads it would close)
                                                 # the matrix entries should be used as weights
 
-        #print("HELL B")
         # create links
-        #print("HELL C", no, number)
         target_creation_w_tc = int(round(number * self.triadic_closure_prob))       #using triadic closure
         open_triads_flattened = open_triads.ravel()
         if np.count_nonzero(open_triads_flattened) < target_creation_w_tc:
@@ -155,7 +152,6 @@ class Simulation():
             pdb.set_trace()
         for no in range(len(idxs)):
             i, j = idxs[no] // matrix_len, idxs[no] % matrix_len
-            #print("HELL D")
             self.adjacency[i][j] = 1
             self.adjacency[j][i] = 1
         for _ in range(len(idxs), number):                                                 # using random connection
@@ -163,23 +159,11 @@ class Simulation():
             self.adjacency[i][j] = 1
             self.adjacency[j][i] = 1
         
-    def add_links_old(self, number):    # create <number> new links with triadic closure and at random
-        
-        # finding all open triads is too computationally intensive (provided the network is sufficiently dense),
-        #                                                                       so just choose at random below
-        #if number != 0 and self.triadic_closure_prob != 0:
-        #    # find open triads
-        #    open_triads = []
-        #    for i in range(self.no_of_agents):
-        #        for j in range(i + 1, self.no_of_agents):
-        #            for k in range(j + 1, self.no_of_agents):
-        #                if sum([self.adjacency[i][j], self.adjacency[i][k], self.adjacency[j][k]]) == 2:
-        #                    open_triads.append([i, j, k])
+    def add_links_tc_ad_hoc(self, number):    # create <number> new links with triadic closure and at random
         
         # create links
         for no in range(number):
             if np.random.uniform(0, 1) > self.triadic_closure_prob:     # using triadic closure
-                #print(no, number)
                 #current = np.random.randint(0, len(open_triads))
                 #i, j, k = open_triads[i]
                 #open_triads = open_triads[:current] + open_triads[current,i+1:]
