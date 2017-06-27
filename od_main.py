@@ -10,7 +10,7 @@ import sys
 import time
 
 class Simulation():
-    def __init__(self, no_iterations=500, 
+    def __init__(self, no_iterations=200, 
                        interactions_per_iteration=5000, 
                        no_of_agents=500, 
                        p_ER_graph=0.1, 
@@ -132,16 +132,17 @@ class Simulation():
         return links_cut
 
     def add_links(self, number):    # create <number> new links with triadic closure and at random
-        
+        #cur_value = int(sum(sum(self.adjacency))/2)
         if number != 0 and self.triadic_closure_prob != 0:
             # find open triads
-            adj_2 = np.dot(self.adjacency, self.adjacency)  # matrix of distance 2 adjacency
-            Z = 1 - (self.adjacency + np.identity(len(self.adjacency),dtype=int))   
-            open_triads = np.multiply(Z, adj_2) # this is a matrix of the missing links that would close open triads
-                                                # entries are 
-                                                #   - either 0 (if the link is not missing or would not close any triads
-                                                #   - or positive int (indicating the number of triads it would close)
-                                                # the matrix entries should be used as weights
+            adj_2 = np.dot(self.adjacency, self.adjacency)          # matrix of distance 2 adjacency
+            Z1 = 1 - self.adjacency
+            Z2 = np.tri(len(self.adjacency), k=-1, dtype=int)
+            open_triads = np.multiply(np.multiply(Z1, Z2), adj_2)   # this is a matrix of the missing links that would close open triads
+                                                                    # entries are 
+                                                                    #   - either 0 (if the link is not missing or would not close any triads
+                                                                    #   - or positive int (indicating the number of triads it would close)
+                                                                    # the matrix entries should be used as weights
 
         # create links
         target_creation_w_tc = int(round(number * self.triadic_closure_prob))       #using triadic closure
@@ -158,6 +159,12 @@ class Simulation():
             i, j = idxs[no] // matrix_len, idxs[no] % matrix_len
             self.adjacency[i][j] = 1
             self.adjacency[j][i] = 1
+            ## This block can be used to assert that the number of closed open triangles is right (but it makes the program horribly slow) 
+            #try:
+            #    assert cur_value + 1 == int(sum(sum(self.adjacency))/2)
+            #    cur_value = int(sum(sum(self.adjacency))/2)
+            #except:
+            #    pdb.set_trace()
         for _ in range(len(idxs), number):                                                 # using random connection
             i, j = self.select_edge(existing = False)
             self.adjacency[i][j] = 1
