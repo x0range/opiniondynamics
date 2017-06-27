@@ -1,8 +1,12 @@
 
 
 import numpy as np
-#import networkx
+import networkx as nx
+import matplotlib.pyplot as plt
+import scipy.cluster.hierarchy  as sch
+from scipy.spatial.distance import pdist
 import pdb
+import sys
 import time
 
 class Simulation():
@@ -62,7 +66,7 @@ class Simulation():
         for t in range(self.no_iterations):
             oldtime, ctime = ctime, time.time()
             print("Iteration {0:5d}/{1:d}, Iteration computation time: {2:10f}" \
-                                                .format(t, self.no_iterations, ctime - oldtime), end="\r")
+                                                .format(t+1, self.no_iterations, ctime - oldtime), end="\r")
             # interactions, each with equal probability for all edges
             for _ in range(self.interactions_per_iteration):
                 i, j = self.select_edge(existing = True)
@@ -184,11 +188,112 @@ class Simulation():
                 self.adjacency[i][j] = 1
                 self.adjacency[j][i] = 1
         
+    def network_metrics(self):      
+        '''Method to analyze the current network structure and give graphical output'''
+        # TODO: take apart into several methods
+        # TODO: allow returning and/or saving of measures
+        try:
+            # get degree distribution
+            degreeDist = [sum(row) for row in self.adjacency]
+            dD_sorted = np.asarray(sorted(degreeDist))                              #degree Distribution cCDF x coordinate
+            dD_sorted_y_cCDF = 1 - (np.arange(len(dD_sorted)) + 1) / len(dD_sorted)  #degree Distribution cCDF y coordinate
+            
+            fig, ax = plt.subplots(2, 2, figsize=(15, 9))
+            ax[0, 0].plot(dD_sorted, dD_sorted_y_cCDF)
+            ax[0, 0].set_title('lin-lin')
+            ax[0, 0].set_xscale('linear')
+            ax[0, 0].set_yscale('linear')
+            ax[0, 0].set_ylabel("cCDF")
+            ax[0, 1].plot(dD_sorted, dD_sorted_y_cCDF)
+            ax[0, 1].set_title('lin-log')
+            ax[0, 1].set_xscale('linear')
+            ax[0, 1].set_yscale('log')
+            ax[1, 0].plot(dD_sorted, dD_sorted_y_cCDF)
+            ax[1, 0].set_title('log-lin')
+            ax[1, 0].set_xscale('log')
+            ax[1, 0].set_yscale('linear')
+            ax[1, 0].set_ylabel("cCDF")
+            ax[1, 0].set_xlabel("Node Degree")
+            ax[1, 1].plot(dD_sorted, dD_sorted_y_cCDF)
+            ax[1, 1].set_title('log-log')
+            ax[1, 1].set_xscale('log')
+            ax[1, 1].set_yscale('log')
+            ax[1, 1].set_xlabel("Node Degree")
+            plt.show()
+
+            # transform adjacency matrix to networkx graph
+            nxGraph = nx.from_numpy_matrix(self.adjacency, create_using=nx.DiGraph())
+            nxGraph = nxGraph.to_undirected()
+            #print(nx.dijkstra_path(nxGraph, 0, 1))
+            
+            # identify connected components
+            connectedComponents = nx.connected_component_subgraphs(nxGraph)
+            cComDist = [len(item) for item in connectedComponents]
+            if len(cComDist) > 1:
+                cCD_sorted = np.asarray(sorted(cComDist))                              #degree Distribution cCDF x coordinate
+                cCD_sorted_y_cCDF = 1 - (np.arange(len(cCD_sorted)) + 1) / len(cCD_sorted)  #degree Distribution cCDF y coordinate
+                
+                plt.gca()
+                plt.plot(cCD_sorted, cCD_sorted_y_cCDF)
+                plt.xscale('log')
+                plt.yscale('log')
+                plt.xlabel("Node Degree")
+                plt.ylabel("cCDF")
+                plt.show()
+            else:
+                print("Network has only one connected component")
+                        
+            # get clustering coefficients for all nodes
+            clustCoefficients = nx.clustering(nxGraph)
+            clustCoeffList = np.asarray(list(clustCoefficients.values()))
+            print("Average clustering coefficient: {0:f}".format(sum(clustCoeffList)/len(clustCoeffList)))
+            
+            # get centrality measures
+            bCentrality = nx.betweenness_centrality(nxGraph)            # betweenness centrality
+            cCentrality = nx.closeness_centrality(nxGraph)              # closeness centrality
+            eCentrality = nx.eigenvector_centrality(nxGraph)            # eigenvector centrality
+            bcList = np.asarray(list(bCentrality.values()))
+            ccList = np.asarray(list(cCentrality.values()))
+            ecList = np.asarray(list(eCentrality.values()))
+            
+            fig, ax = plt.subplots(2, 2, figsize=(15, 9))
+            ax[0, 0].scatter(ecList, bcList)
+            ax[0, 0].set_ylabel("Betweenness Centrality")
+            ax[0, 1].scatter(ecList, ccList)
+            ax[0, 1].set_ylabel("Closeness Centrality")
+            ax[1, 0].scatter(ecList, clustCoeffList)
+            ax[1, 0].set_xlabel("Eigenvector Centrality")
+            ax[1, 0].set_ylabel("Clustering Coefficient")
+            ax[1, 1].scatter(ecList, degreeDist)
+            ax[1, 1].set_xlabel("Eigenvector Centrality")
+            ax[1, 1].set_ylabel("Node Degree")
+            plt.show()
+            
+            # get distance matrix
+            distanceDict = nx.all_pairs_shortest_path_length(nxGraph)
+            
+            distance = np.asarray([distanceDict[i][j] for i in range(len(distanceDict)) for j in \
+                                  range(len(distanceDict))]).reshape(len(distanceDict),len(distanceDict))
+            
+            # get clustering for dendrogram
+            dist_upper_triangle = pdist(distance)
+            hierarchicalClustering = sch.linkage(dist_upper_triangle, method='ward')
+            flat_cluster = sch.fcluster(hierarchicalClustering, 0.2*distance.max(), criterion='distance')
+            
+            plt.gca()
+            sch.dendrogram(hierarchicalClustering, color_threshold=1, show_leaf_counts=True) #,labels=["","",...])
+            plt.show()
+            
+        except:
+            print(sys.exc_info())
+            pdb.set_trace()
+        
     def save_data(self, time):  # TODO (not implemented, should save data on iteration)
         pass
  
     def evaluate_results(self): # TODO (not implemented, should create output, save results, etc.)
-        pass
+        self.network_metrics()
+        #pass
         
 # main entry point
 if __name__ == "__main__":
