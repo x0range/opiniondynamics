@@ -10,15 +10,15 @@ import sys
 import time
 
 class Simulation():
-    def __init__(self, no_iterations=200, 
-                       interactions_per_iteration=5000, 
+    def __init__(self, no_iterations=20, 
+                       interactions_per_iteration=250, 
                        no_of_agents=500, 
                        p_ER_graph=0.1, 
                        friction=.1, 
-                       no_of_statements=1, 
+                       no_of_statements=200, 
                        truth=[], 
                        fraction_passive=.75, 
-                       annoyance_threshold_per_interaction=0.8,
+                       annoyance_threshold_per_interaction=0.00000000001,
                        triadic_closure_prob=.75):
         # save parameters
         self.no_iterations = no_iterations
@@ -30,9 +30,12 @@ class Simulation():
         self.truth = truth
         self.fraction_passive = fraction_passive
         self.annoyance_threshold_per_interaction = annoyance_threshold_per_interaction
-        self.annoyance_threshold = annoyance_threshold_per_interaction * no_of_agents * 1./interactions_per_iteration
+        self.annoyance_threshold = annoyance_threshold_per_interaction * interactions_per_iteration * 1./ no_of_agents
         self.triadic_closure_prob = triadic_closure_prob
         
+        # prepare history lists
+        self.belief_history = [[] for i in range(no_of_agents)]
+                
         # initialize statements/truth
         if len(self.truth) < no_of_statements:
             self.truth.append(np.random.binomial(1, .5, 1)[0])
@@ -58,15 +61,21 @@ class Simulation():
         for item in range(len(self.truth)):
             i = np.random.randint(self.no_of_agents)
             self.beliefs[item][i] = 1.
-            i = np.random.randint(self.no_of_agents)
-            self.beliefs[item][i] = -1.
+            j = i
+            while (j == i):
+                j = np.random.randint(self.no_of_agents)
+            self.beliefs[item][j] = -1.
     
     def run(self):  # controls simulation run, defines sequence of events
+        #self.evaluate_results()
         ctime = time.time()
+        links_cut = 0
+        #save data - TODO (not implemented)
+        self.save_data(-1)
         for t in range(self.no_iterations):
             oldtime, ctime = ctime, time.time()
-            print("Iteration {0:5d}/{1:d}, Iteration computation time: {2:10f}" \
-                                                .format(t+1, self.no_iterations, ctime - oldtime), end="\r")
+            print("Iteration {0:5d}/{1:d}, Links cut in last iteration: {3:3d} Iteration computation time: {2:10f}" \
+                                                .format(t+1, self.no_iterations, ctime - oldtime, links_cut), end="\r")
             # interactions, each with equal probability for all edges
             for _ in range(self.interactions_per_iteration):
                 i, j = self.select_edge(existing = True)
@@ -104,7 +113,7 @@ class Simulation():
     def interact(self, a1, a2): # conduct opinion dynamics interaction between agents #a1 and #a2
         for item in range(len(self.truth)): 
             b1, b2 = self.beliefs[item][a1], self.beliefs[item][a2]
-            if b1 * b2 <= 1:
+            if b1 * b2 <= 0:
                 if self.truth_lookup_capacity[a1] > 0:
                     self.beliefs[item][a1] = b1 + (self.truth[item] - b1) * self.truth_lookup_capacity[a1]
                 else:
@@ -133,28 +142,29 @@ class Simulation():
 
     def add_links(self, number):    # create <number> new links with triadic closure and at random
         #cur_value = int(sum(sum(self.adjacency))/2)
+        idxs = []
         if number != 0 and self.triadic_closure_prob != 0:
             # find open triads
             adj_2 = np.dot(self.adjacency, self.adjacency)          # matrix of distance 2 adjacency
-            Z1 = 1 - self.adjacency
-            Z2 = np.tri(len(self.adjacency), k=-1, dtype=int)
+            Z1 = 1 - self.adjacency                                 # matrix of non-existent links
+            Z2 = np.tri(len(self.adjacency), k=-1, dtype=int)       # lower triagonal matrix with main diagonal 0
             open_triads = np.multiply(np.multiply(Z1, Z2), adj_2)   # this is a matrix of the missing links that would close open triads
                                                                     # entries are 
                                                                     #   - either 0 (if the link is not missing or would not close any triads
                                                                     #   - or positive int (indicating the number of triads it would close)
                                                                     # the matrix entries should be used as weights
 
-        # create links
-        target_creation_w_tc = int(round(number * self.triadic_closure_prob))       #using triadic closure
-        open_triads_flattened = open_triads.ravel()
-        if np.count_nonzero(open_triads_flattened) < target_creation_w_tc:
-            print("Warning: Not enough open triads, will add more random links. Continuing ...")
-            target_creation_w_tc = np.count_nonzero(open_triads_flattened)
-        matrix_len = len(open_triads)      # this is actually self.no_of_agents
-        try:
-            idxs = np.random.choice(matrix_len**2, target_creation_w_tc, False, p=open_triads_flattened/sum(open_triads_flattened))
-        except:
-            pdb.set_trace()
+            # create links
+            target_creation_w_tc = int(round(number * self.triadic_closure_prob))       #using triadic closure
+            open_triads_flattened = open_triads.ravel()
+            if np.count_nonzero(open_triads_flattened) < target_creation_w_tc:
+                print("Warning: Not enough open triads, will add more random links. Continuing ...")
+                target_creation_w_tc = np.count_nonzero(open_triads_flattened)
+            matrix_len = len(open_triads)      # this is actually self.no_of_agents
+            try:
+                idxs = np.random.choice(matrix_len**2, target_creation_w_tc, False, p=open_triads_flattened/sum(open_triads_flattened))
+            except:
+                pdb.set_trace()
         for no in range(len(idxs)):
             i, j = idxs[no] // matrix_len, idxs[no] % matrix_len
             self.adjacency[i][j] = 1
@@ -295,10 +305,16 @@ class Simulation():
             print(sys.exc_info())
             pdb.set_trace()
         
-    def save_data(self, time):  # TODO (not implemented, should save data on iteration)
-        pass
+    def save_data(self, time):  # TODO (not really implemented, should save more data on iteration)
+        for i in range(len(self.beliefs[0])):                    #TODO: make complatible with multiple statements?
+            self.belief_history[i].append(self.beliefs[0][i])
+        #pass
  
     def evaluate_results(self): # TODO (not implemented, should create output, save results, etc.)
+        plt.gca()
+        for i in range(len(self.belief_history)):
+            plt.plot(range(len(self.belief_history[i])), self.belief_history[i])
+        plt.show()
         self.network_metrics()
         #pass
         
